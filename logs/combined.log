@@ -1,0 +1,15 @@
+2026-02-22 15:29:38 [ERROR]: Failed to connect to database: Authentication failed against database server at `localhost`, the provided database credentials for `user` are not valid.
+
+Please make sure to provide valid database credentials for the database server at `localhost`.
+PrismaClientInitializationError: Authentication failed against database server at `localhost`, the provided database credentials for `user` are not valid.
+
+Please make sure to provide valid database credentials for the database server at `localhost`.
+    at t (/home/abduqodir/Desktop/telegram-bot-for-tires-main/backend/node_modules/@prisma/client/runtime/library.js:112:2488)
+    at async connectDatabase (/home/abduqodir/Desktop/telegram-bot-for-tires-main/backend/src/utils/database.js:23:5)
+    at async main (/home/abduqodir/Desktop/telegram-bot-for-tires-main/backend/server.js:19:3)
+2026-02-22 15:31:47 [ERROR]: Failed to connect to database: Database `shershina` does not exist on the database server at `localhost:5432`.
+PrismaClientInitializationError: Database `shershina` does not exist on the database server at `localhost:5432`.
+    at t (/home/abduqodir/Desktop/telegram-bot-for-tires-main/backend/node_modules/@prisma/client/runtime/library.js:112:2488)
+    at async connectDatabase (/home/abduqodir/Desktop/telegram-bot-for-tires-main/backend/src/utils/database.js:23:5)
+    at async main (/home/abduqodir/Desktop/telegram-bot-for-tires-main/backend/server.js:19:3)
+2026-02-22 15:43:20 [INFO]: Database connected successfully

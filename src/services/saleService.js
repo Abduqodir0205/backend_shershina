@@ -3,6 +3,7 @@
  * Sotuv bo'lganda chiqim jadvaliga foyda bilan yozish, rabochiy_balon sotuvini saqlash.
  * Barcha operatsiyalar Prisma tranzaksiyasi orqali.
  */
+const { Prisma } = require('@prisma/client');
 const { prisma } = require('../utils/database');
 const logger = require('../utils/logger');
 const inventoryService = require('./inventoryService');
@@ -144,28 +145,39 @@ async function getRabochiySotuvByDateRange(startDate, endDate, shopId = 1) {
 }
 
 /**
- * Chiqim jami (umumiy_qiymat, foyda, naqd_foyda, zaxira_foyda) shop va sana bo'yicha.
+ * Chiqim jami (umumiy_qiymat/total_price, foyda, naqd_foyda, zaxira_foyda) shop va sana bo'yicha.
+ * Legacy (razmer, sotildi, umumiy_qiymat) va yangi (tire_id, quantity, total_price) yozuvlarni birlashtiradi.
  */
 async function getChiqimTotals(shopId, startDate, endDate = null) {
   const sid = shopId ?? DEFAULT_SHOP_ID;
-  const where = { shopId: sid };
-  if (startDate || endDate) {
-    where.createdAt = {};
-    if (startDate) where.createdAt.gte = startDate;
-    if (endDate) where.createdAt.lte = endDate;
-  }
+  const conditions = [Prisma.sql`shop_id = ${sid}`];
+  if (startDate) conditions.push(Prisma.sql`created_at >= ${startDate}`);
+  if (endDate) conditions.push(Prisma.sql`created_at <= ${endDate}`);
+  const whereClause = conditions.length ? Prisma.join(conditions, ' AND ') : Prisma.empty;
 
-  const agg = await prisma.chiqim.aggregate({
-    where,
-    _sum: { totalPrice: true, quantity: true },
-  });
-  const sum = Number(agg._sum.totalPrice || 0);
-  const sotildi = Number(agg._sum.quantity || 0);
+  const rows = await prisma.$queryRaw(
+    Prisma.sql`
+    SELECT
+      COALESCE(SUM(COALESCE(umumiy_qiymat, total_price)), 0)::float AS sum,
+      COALESCE(SUM(COALESCE(sotildi, quantity)), 0)::int AS sotildi,
+      COALESCE(SUM(foyda), 0)::float AS foyda,
+      COALESCE(SUM(naqd_foyda), 0)::float AS naqd_foyda,
+      COALESCE(SUM(zaxira_foyda), 0)::float AS zaxira_foyda
+    FROM sales
+    WHERE ${whereClause}
+    `
+  );
+  const r = Array.isArray(rows) ? rows[0] : rows;
+  const sum = Number(r?.sum ?? 0);
+  const sotildi = Number(r?.sotildi ?? 0);
+  const foyda = Number(r?.foyda ?? 0);
+  const naqd_foyda = Number(r?.naqd_foyda ?? 0);
+  const zaxira_foyda = Number(r?.zaxira_foyda ?? 0);
   return {
     sum,
-    foyda: sum,
-    naqd_foyda: 0,
-    zaxira_foyda: 0,
+    foyda: foyda || sum,
+    naqd_foyda,
+    zaxira_foyda,
     sotildi,
   };
 }

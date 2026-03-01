@@ -1,7 +1,9 @@
 /**
  * Legacy jadvallar (kirim, chiqim, rabochiy_balon, sizes, brands, olinish_kerak) uchun
  * barcha o'qish/yozish — faqat Prisma orqali. index.js pool.query o'rniga shu servis.
+ * sales jadvali: legacy (razmer, sotildi, umumiy_qiymat) va yangi (tire_id, quantity, total_price) qo'llab-quvvatlanadi.
  */
+const { Prisma } = require('@prisma/client');
 const { prisma } = require('../utils/database');
 
 const DEFAULT_SHOP_ID = 1;
@@ -27,21 +29,23 @@ function mapKirimRow(r) {
   };
 }
 
-// Chiqim modeli bazada "sales" jadvaliga map qilingan; razmer/balon_turi kirim yoki usedTire orqali
+// Chiqim modeli bazada "sales" jadvaliga map qilingan; razmer/balon_turi kirim, usedTire yoki legacy ustunlar orqali
 function mapChiqimRowFromSale(r) {
-  const razmer = r.kirim?.size ?? r.usedTire?.size ?? '';
-  const balon_turi = r.kirim?.brand ?? (r.usedTire ? 'Ishchi' : '');
+  const razmer = r.razmer ?? r.kirim?.size ?? r.usedTire?.size ?? '';
+  const balon_turi = r.balonTuri ?? r.kirim?.brand ?? (r.usedTire ? 'Ishchi' : '');
+  const sotildi = r.sotildi ?? r.quantity ?? 0;
+  const umumiy_qiymat = Math.round(Number(r.umumiyQiymat ?? r.totalPrice ?? 0));
   return {
     id: r.id,
     razmer,
     balon_turi,
-    sotildi: r.quantity,
-    umumiy_qiymat: Math.round(Number(r.totalPrice ?? 0)),
-    foyda: 0,
-    naqd_foyda: null,
-    zaxira_foyda: null,
-    rabochiy_olindi: 0,
-    rabochiy_narxi: 0,
+    sotildi,
+    umumiy_qiymat,
+    foyda: r.foyda ?? 0,
+    naqd_foyda: r.naqdFoyda ?? null,
+    zaxira_foyda: r.zaxiraFoyda ?? null,
+    rabochiy_olindi: r.rabochiyOlindi ?? 0,
+    rabochiy_narxi: r.rabochiyNarxi ?? 0,
     sana: r.createdAt,
   };
 }
@@ -272,17 +276,30 @@ async function getChiqimSoldByRazmerBrandSince(shopId, sinceDate) {
 }
 
 async function getChiqimTotalsAggregate(shopId) {
-  const r = await prisma.chiqim.aggregate({
-    where: shopWhere(shopId),
-    _sum: { totalPrice: true, quantity: true },
-  });
-  const sum = Number(r._sum.totalPrice || 0);
-  const sotildi = Number(r._sum.quantity || 0);
+  const sid = shopId ?? DEFAULT_SHOP_ID;
+  const rows = await prisma.$queryRaw(
+    Prisma.sql`
+    SELECT
+      COALESCE(SUM(COALESCE(umumiy_qiymat, total_price)), 0)::float AS sum,
+      COALESCE(SUM(COALESCE(sotildi, quantity)), 0)::int AS sotildi,
+      COALESCE(SUM(foyda), 0)::float AS foyda,
+      COALESCE(SUM(naqd_foyda), 0)::float AS naqd_foyda,
+      COALESCE(SUM(zaxira_foyda), 0)::float AS zaxira_foyda
+    FROM sales
+    WHERE shop_id = ${sid}
+    `
+  );
+  const r = Array.isArray(rows) ? rows[0] : rows;
+  const sum = Number(r?.sum ?? 0);
+  const sotildi = Number(r?.sotildi ?? 0);
+  const foyda = Number(r?.foyda ?? 0);
+  const naqd_foyda = Number(r?.naqd_foyda ?? 0);
+  const zaxira_foyda = Number(r?.zaxira_foyda ?? 0);
   return {
     sum,
-    foyda: sum,
-    naqd_foyda: 0,
-    zaxira_foyda: 0,
+    foyda: foyda || sum,
+    naqd_foyda,
+    zaxira_foyda,
     sotildi,
   };
 }

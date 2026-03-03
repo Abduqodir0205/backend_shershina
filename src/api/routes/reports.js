@@ -4,8 +4,13 @@ const inventoryService = require('../../services/inventoryService');
 const saleService = require('../../services/saleService');
 const shopService = require('../../services/shopService');
 
+// SELLER faqat o'z do'konini ko'radi; ADMIN do'kon tanlashi mumkin.
 function parseShopId(req) {
-  const raw = req.query.shopId ?? req.user?.shopId ?? process.env.DEFAULT_SHOP_ID;
+  const role = (req.user?.role || '').toUpperCase();
+  const raw =
+    role === 'SELLER'
+      ? req.user?.shopId ?? process.env.DEFAULT_SHOP_ID
+      : req.query.shopId ?? req.user?.shopId ?? process.env.DEFAULT_SHOP_ID;
   const id = parseInt(raw, 10);
   return isNaN(id) ? 1 : id;
 }

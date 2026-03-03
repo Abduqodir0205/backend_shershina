@@ -2,8 +2,13 @@ const express = require('express');
 const router = express.Router();
 const inventoryService = require('../../services/inventoryService');
 
+// SELLER faqat o'z do'konini ko'radi (shop_id); query.shopId e'tiborsiz.
 function parseShopId(req) {
-  const raw = req.query.shopId ?? req.user?.shopId ?? process.env.DEFAULT_SHOP_ID;
+  const role = (req.user?.role || '').toUpperCase();
+  const raw =
+    role === 'SELLER'
+      ? req.user?.shopId ?? process.env.DEFAULT_SHOP_ID
+      : req.query.shopId ?? req.user?.shopId ?? process.env.DEFAULT_SHOP_ID;
   const id = parseInt(raw, 10);
   return isNaN(id) ? 1 : id;
 }

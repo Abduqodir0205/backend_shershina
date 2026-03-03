@@ -1,0 +1,7 @@
+-- Ixtiyoriy: Mavjud sotuvchilarni USER dan SELLER ga o'zgartirish.
+-- Faqat kerakli foydalanuvchilarni tanlang va shop_id ni to'ldiring.
+-- Masalan: telefon raqam bo'yicha
+-- UPDATE users SET role = 'SELLER', shop_id = 1 WHERE phone IN ('+998901234567', '+998909876543');
+-- yoki id bo'yicha:
+-- UPDATE users SET role = 'SELLER', shop_id = 1 WHERE id IN (2, 3, 5);
+-- Keyin bu faylni o'zingiz tahrirlab, kerakli UPDATE ni bajarishingiz mumkin.

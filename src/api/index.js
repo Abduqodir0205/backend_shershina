@@ -1,6 +1,6 @@
 /**
  * API Layer: Mobil ilova uchun Express routerlari.
- * /api/auth ochiq; qolganlari JWT. Inventory va reports faqat ADMIN/BOSS.
+ * /api/auth ochiq; qolganlari JWT. Inventory va reports: ADMIN va SELLER. USER kira olmaydi.
  */
 const express = require('express');
 const { jwtAuth } = require('./middleware/jwtAuth');
@@ -20,8 +20,8 @@ const protected = express.Router();
 protected.use(jwtAuth);
 protected.use('/users', userRoutes);
 protected.use('/shops', shopRoutes);
-protected.use('/inventory', roleCheck(['ADMIN']), inventoryRoutes);
-protected.use('/reports', roleCheck(['ADMIN']), reportsRoutes);
+protected.use('/inventory', roleCheck(['ADMIN', 'SELLER']), inventoryRoutes);
+protected.use('/reports', roleCheck(['ADMIN', 'SELLER']), reportsRoutes);
 router.use(protected);
 
 router.use((req, res) => {

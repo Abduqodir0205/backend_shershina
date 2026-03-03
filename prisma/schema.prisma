@@ -251,6 +251,7 @@ model RabochiySotuv {
 enum Role {
   USER
   ADMIN
+  SELLER
 }
 
 enum ItemType {

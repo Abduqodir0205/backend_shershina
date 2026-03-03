@@ -1,11 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const authService = require('../../services/authService');
+const { getRoleDisplayName } = require('../utils/roleDisplay');
 
 function toSafeUser(user) {
   if (!user) return user;
   const u = { ...user, passwordHash: undefined };
   if (typeof u.telegramId === 'bigint') u.telegramId = u.telegramId.toString();
+  u.roleDisplayName = getRoleDisplayName(u.role);
   return u;
 }
 

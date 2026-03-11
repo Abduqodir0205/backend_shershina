@@ -124,6 +124,45 @@ async function addKirimBatch(rows, shopId, options = {}) {
 }
 
 /**
+ * Mobil yoki veb ilovadan bitta kirim yozuvini qo'shish/yangi qator yoki mavjud qatorni oshirish.
+ * Bot bilan moslik uchun legacy format (razmer, balon_turi) orqali createKirim dan foydalanadi.
+ * @param {{ shopId?: number, brand: string, size: string, quantity: number, priceBuy?: number, priceSell?: number }} payload
+ */
+async function addKirimItem(payload) {
+  const shopId = payload.shopId ?? DEFAULT_SHOP_ID;
+  const razmer = String(payload.size || '').trim();
+  const balonTuri = String(payload.brand || '').trim();
+  const quantity = Math.max(0, Math.round(Number(payload.quantity) || 0));
+  const kelganNarx = Math.round(Number(payload.priceBuy) || 0);
+  let sotishNarx = Math.round(Number(payload.priceSell) || kelganNarx);
+  if (sotishNarx <= kelganNarx) {
+    sotishNarx = kelganNarx > 0 ? kelganNarx + 1 : 0;
+  }
+
+  if (!razmer || !balonTuri || quantity <= 0) {
+    throw new Error('Invalid kirim payload');
+  }
+
+  const umumiyQiymat = quantity * sotishNarx;
+
+  // sizes va brands jadvalini to'ldirib borish
+  await legacyData.ensureSize(razmer);
+  await legacyData.ensureBrand(balonTuri);
+
+  const kirim = await legacyData.createKirim({
+    razmer,
+    balon_turi: balonTuri,
+    soni: quantity,
+    kelgan_narx: kelganNarx,
+    sotish_narx: sotishNarx,
+    umumiy_qiymat: umumiyQiymat,
+    shop_id: shopId,
+  });
+
+  return kirim;
+}
+
+/**
  * Chiqim uchun o'rtacha kelgan narx (kirim bo'yicha, dollar_kurs hisobga olinadi).
  */
 async function getKelganNarx(razmer, balonTuri, shopId = 1) {
@@ -335,4 +374,5 @@ module.exports = {
   getSkladValuationByTannarx,
   syncOlinishKerakFromStock,
   getRabochiyOmborValue,
+  addKirimItem,
 };

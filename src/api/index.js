@@ -10,6 +10,7 @@ const userRoutes = require('./routes/users');
 const shopRoutes = require('./routes/shops');
 const inventoryRoutes = require('./routes/inventory');
 const reportsRoutes = require('./routes/reports');
+const salesRoutes = require('./routes/sales');
 
 const router = express.Router();
 router.use(express.json());
@@ -22,6 +23,7 @@ protected.use('/users', userRoutes);
 protected.use('/shops', shopRoutes);
 protected.use('/inventory', roleCheck(['ADMIN', 'SELLER']), inventoryRoutes);
 protected.use('/reports', roleCheck(['ADMIN', 'SELLER']), reportsRoutes);
+protected.use('/sales', roleCheck(['ADMIN', 'SELLER']), salesRoutes);
 router.use(protected);
 
 router.use((req, res) => {

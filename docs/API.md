@@ -185,6 +185,45 @@ SELLER uchun do‘kon faqat `user.shopId`; ADMIN uchun `?shopId=` ixtiyoriy.
 
 ---
 
+### POST /api/inventory/add
+
+Yangi shina kirimini qo‘shish (yoki mavjud qator `quantity` sini oshirish) — `tires` (`Kirim`) jadvaliga yozadi.  
+SELLER uchun `shopId` avtomatik `user.shopId`; ADMIN uchun body ichida `shopId` berilishi mumkin.
+
+**Qabul qiladi (body, JSON):**
+
+| Maydon      | Turi   | Majburiy | Tavsif                                        |
+|-------------|--------|----------|-----------------------------------------------|
+| `brand`     | string | Ha       | Brend nomi (`balon_turi`)                    |
+| `size`      | string | Ha       | Razmer (masalan, `"205/55 R16"`)             |
+| `quantity`  | number | Ha       | Dona (musbat butun son)                      |
+| `priceBuy`  | number | Yo‘q     | Kelgan narx, 1 dona uchun (so‘m)             |
+| `priceSell` | number | Yo‘q     | Sotish narx, 1 dona uchun (so‘m); berilmasa `>= priceBuy` qilib avtomatik olinadi |
+| `shopId`    | number | Yo‘q     | Faqat ADMIN uchun ixtiyoriy, do‘kon ID       |
+
+**Muvaffaqiyat (201):**
+
+```json
+{
+  "id": 1,
+  "shopId": 1,
+  "brand": "Bridgestone",
+  "size": "205/55 R16",
+  "priceBuy": 500000,
+  "priceSell": 600000,
+  "quantity": 15,
+  "createdAt": "2025-01-01T00:00:00.000Z",
+  "updatedAt": "2025-01-01T00:00:00.000Z"
+}
+```
+
+**Xatolar (namuna):**
+
+- `400` — `{ "error": "brand, size va quantity majburiy", "code": "INVALID_PAYLOAD" }`
+- `400` — `{ "error": "quantity musbat butun son bo'lishi kerak", "code": "INVALID_QUANTITY" }`
+
+---
+
 ## 5. Reports — `/api/reports` (JWT + ADMIN yoki SELLER)
 
 **Query:** `shopId` — ixtiyoriy (ADMIN); SELLER uchun faqat o‘z do‘koni.
@@ -254,6 +293,80 @@ SELLER uchun do‘kon faqat `user.shopId`; ADMIN uchun `?shopId=` ixtiyoriy.
 
 ---
 
+## 6. Sales — `/api/sales` (JWT + ADMIN yoki SELLER)
+
+Yangi sotuv (chiqim) yozuvi: `sales` jadvaliga yozadi, `tires` stokini kamaytiradi va ixtiyoriy trade-in bo‘lsa `rabochiy_balon` ga yozadi.  
+SELLER uchun do‘kon faqat `user.shopId`; ADMIN uchun `shopId` body orqali berilishi mumkin.
+
+### POST /api/sales
+
+**Qabul qiladi (body, JSON):**
+
+| Maydon               | Turi    | Majburiy | Tavsif |
+|----------------------|---------|----------|--------|
+| `tireId`             | number  | Ha       | Sotilayotgan yangi shina (`Kirim`) ID si |
+| `quantity`           | number  | Ha       | Sotilgan dona (musbat butun son)         |
+| `totalPrice`         | number  | Ha       | Jami sotuv summasi (so‘m, naqd + trade-in qiymati) |
+| `shopId`             | number  | Yo‘q     | Faqat ADMIN uchun ixtiyoriy, do‘kon ID   |
+| `tradeIn`            | object  | Yo‘q     | Agar mijoz eski balonni tashlab ketayotgan bo‘lsa, trade-in ma’lumotlari |
+| `tradeIn.count`      | number  | Yo‘q     | Qabul qilingan rabochiy balonlar soni (odatda 0 yoki 1) |
+| `tradeIn.price`      | number  | Yo‘q     | Bitta rabochiy balon uchun qabul narxi (so‘m) |
+| `tradeIn.size`       | string  | Yo‘q     | Eski balon razmeri (default: sotilgan razmer) |
+| `tradeIn.brand`      | string  | Yo‘q     | Eski balon turi (default: sotilgan brend) |
+| `tradeIn.condition`  | string  | Yo‘q     | Holat (`"yaxshi"` default)                |
+
+**Muvaffaqiyat (201):**
+
+```json
+{
+  "shopId": 1,
+  "tireId": 10,
+  "quantity": 2,
+  "totalPrice": 1200000,
+  "naqdFoyda": 200000,
+  "zaxiraFoyda": 50000,
+  "foyda": 250000,
+  "chiqim": {
+    "id": 123,
+    "itemType": "NEW",
+    "tireId": 10,
+    "quantity": 2,
+    "totalPrice": 1200000,
+    "shopId": 1,
+    "razmer": "205/55 R16",
+    "balonTuri": "Bridgestone",
+    "sotildi": 2,
+    "umumiyQiymat": 1200000,
+    "foyda": 250000,
+    "naqdFoyda": 200000,
+    "zaxiraFoyda": 50000,
+    "rabochiyOlindi": 1,
+    "rabochiyNarxi": 50000,
+    "createdAt": "2025-01-01T00:00:00.000Z"
+  },
+  "updatedTire": {
+    "id": 10,
+    "shopId": 1,
+    "brand": "Bridgestone",
+    "size": "205/55 R16",
+    "priceBuy": 500000,
+    "priceSell": 600000,
+    "quantity": 8
+  },
+  "rabochiyIds": [ 5 ]
+}
+```
+
+**Xatolar (namuna):**
+
+- `400` — `{ "error": "tireId, quantity va totalPrice majburiy", "code": "INVALID_PAYLOAD" }`
+- `400` — `{ "error": "quantity musbat butun son bo'lishi kerak", "code": "INVALID_QUANTITY" }`
+- `400` — `{ "error": "totalPrice musbat son bo'lishi kerak", "code": "INVALID_TOTAL_PRICE" }`
+- `400` — `{ "error": "Skladda yetarli shina yo'q", "code": "INSUFFICIENT_STOCK" }`
+- `404` — `{ "error": "Shina topilmadi yoki boshqa do'konga tegishli", "code": "TIRE_NOT_FOUND" }`
+
+---
+
 ## Umumiy xato javoblari
 
 | Kod | Body (namuna) |
@@ -278,6 +391,8 @@ SELLER uchun do‘kon faqat `user.shopId`; ADMIN uchun `?shopId=` ixtiyoriy.
 | GET | /api/inventory/new | JWT, ADMIN/SELLER | ?shopId | totalQuantity, items |
 | GET | /api/inventory/used | JWT, ADMIN/SELLER | ?shopId | totalQuantity, items |
 | GET | /api/inventory/rabochiy | JWT, ADMIN/SELLER | ?shopId | totalQuantity, items |
+| POST | /api/inventory/add | JWT, ADMIN/SELLER | body: brand, size, quantity, priceBuy?, priceSell?, shopId? (ADMIN) | Yangi/yoki yangilangan Kirim (tires) yozuvi |
 | GET | /api/reports/inventory | JWT, ADMIN/SELLER | ?shopId | shopId, skladRows, fullSummary, rabOmbor |
 | GET | /api/reports/sales | JWT, ADMIN/SELLER | ?shopId, ?startDate, ?endDate | shopId, chiqimRows, rabSotuvRows, chiqimTotals |
 | GET | /api/reports/dashboard | JWT, ADMIN/SELLER | ?shopId | shopId, chiqimTotals, rabOmbor, skladInvestitsiya, kutilayotganFoyda |
+| POST | /api/sales | JWT, ADMIN/SELLER | body: tireId, quantity, totalPrice, tradeIn?, shopId? (ADMIN) | Sotuv natijasi (chiqim, updatedTire, rabochiyIds) |

@@ -7,6 +7,7 @@ const { Prisma } = require('@prisma/client');
 const { prisma } = require('../utils/database');
 const logger = require('../utils/logger');
 const inventoryService = require('./inventoryService');
+const legacyData = require('./legacyDataService');
 
 /**
  * Chiqim yozuvi + ixtiyoriy rabochiy balonlar omborga qo'shish + sync olinish_kerak.
@@ -72,6 +73,129 @@ async function saveChiqim(data, shopId = 1) {
   await inventoryService.syncOlinishKerakFromStock(shopId);
 
   return { naqdFoyda, zaxiraFoyda, foyda, rabIds };
+}
+
+/**
+ * Mobil/backend API dan yangi formatdagi sotuvni saqlash.
+ * - tires (Kirim) quantity dan ayiradi
+ * - sales (Chiqim) jadvaliga yangi va legacy ustunlar bilan yozadi
+ * - agar trade-in bo'lsa, rabochiy_balon ga yozadi
+ */
+async function saveSaleFromApi({ shopId, tireId, quantity, totalPrice, tradeIn, user }) {
+  const sid = shopId ?? 1;
+  const q = Math.max(0, Math.round(Number(quantity) || 0));
+  const total = Number(totalPrice);
+
+  if (!tireId || q <= 0 || !Number.isFinite(total) || total <= 0) {
+    const err = new Error('Noto\'g\'ri sotuv ma\'lumotlari');
+    err.code = 'INVALID_SALE_PAYLOAD';
+    throw err;
+  }
+
+  const tire = await prisma.kirim.findUnique({
+    where: { id: tireId },
+  });
+
+  if (!tire || (tire.shopId != null && tire.shopId !== sid)) {
+    const err = new Error('Shina topilmadi yoki boshqa do\'konga tegishli');
+    err.code = 'TIRE_NOT_FOUND';
+    throw err;
+  }
+
+  if (tire.quantity < q) {
+    const err = new Error('Skladda yetarli shina yo\'q');
+    err.code = 'INSUFFICIENT_STOCK';
+    throw err;
+  }
+
+  const razmer = tire.size;
+  const balon_turi = tire.brand;
+
+  // Trade-in (rabochiy balon) parametrlari
+  const trade = tradeIn || {};
+  const rabCount = Math.max(0, Math.round(Number(trade.count) || 0));
+  const rabPrice = Math.round(Number(trade.price) || 0);
+  const rabSize = trade.size || razmer;
+  const rabBrand = trade.brand || balon_turi;
+  const rabHolat = trade.condition || 'yaxshi';
+
+  const rabochiySumma = rabCount * rabPrice;
+  const naqdTushum = total - rabochiySumma;
+  const xarajatPer = await inventoryService.getKelganNarx(razmer, balon_turi, sid);
+  const xarajat = xarajatPer * q;
+  const naqdFoyda = Math.round(naqdTushum - xarajat);
+  const zaxiraFoyda = rabochiySumma;
+  const foyda = naqdFoyda + zaxiraFoyda;
+
+  const adminId = null; // legacy Admin jadvali bilan bog'lanmagan; hozircha null.
+
+  const txResult = await prisma.$transaction(async (tx) => {
+    const updatedTire = await tx.kirim.update({
+      where: { id: tireId },
+      data: { quantity: { decrement: q } },
+    });
+
+    if (updatedTire.quantity < 0) {
+      const err = new Error('Skladda yetarli shina yo\'q');
+      err.code = 'INSUFFICIENT_STOCK';
+      throw err;
+    }
+
+    const chiqim = await tx.chiqim.create({
+      data: {
+        itemType: 'NEW',
+        tireId,
+        quantity: q,
+        totalPrice: total,
+        adminId,
+        shopId: sid,
+        // Legacy ustunlar bot va eski tizimlar uchun
+        razmer,
+        balonTuri: balon_turi,
+        sotildi: q,
+        umumiyQiymat: total,
+        foyda,
+        naqdFoyda,
+        zaxiraFoyda,
+        rabochiyOlindi: rabCount || null,
+        rabochiyNarxi: rabCount > 0 ? rabPrice : null,
+      },
+    });
+
+    const rabIds = [];
+    if (rabCount > 0 && rabSize && rabBrand && rabPrice > 0) {
+      for (let i = 0; i < rabCount; i++) {
+        const r = await tx.rabochiyBalon.create({
+          data: {
+            razmer: rabSize,
+            balonTuri: rabBrand,
+            soni: 1,
+            narx: rabPrice,
+            holat: rabHolat,
+            shopId: sid,
+          },
+        });
+        rabIds.push(r.id);
+      }
+    }
+
+    return { chiqim, updatedTire, rabIds };
+  });
+
+  await inventoryService.syncOlinishKerakFromStock(sid);
+
+  return {
+    shopId: sid,
+    tireId,
+    quantity: q,
+    totalPrice: total,
+    naqdFoyda,
+    zaxiraFoyda,
+    foyda,
+    chiqim: txResult.chiqim,
+    updatedTire: txResult.updatedTire,
+    rabochiyIds: txResult.rabIds,
+  };
 }
 
 /**
@@ -198,4 +322,5 @@ module.exports = {
   getRabochiySotuvByDateRange,
   getChiqimTotals,
   addRabochiyBalon,
+  saveSaleFromApi,
 };
